@@ -1,0 +1,16 @@
+# Applied at the cutover, after writes moved to CloudNativePG: changes flow
+# back to RDS (subscribed by cutover.sh), so rolling back is a config switch
+# instead of a restore. Removed once the rollback window closes.
+apiVersion: postgresql.cnpg.io/v1
+kind: Publication
+metadata:
+  name: orders-rollback
+  namespace: orders
+spec:
+  cluster:
+    name: orders-db
+  name: orders_rollback
+  dbname: orders
+  target:
+    allTables: true
+  publicationReclaimPolicy: delete

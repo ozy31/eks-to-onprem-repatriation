@@ -1,0 +1,6 @@
+name: openbao
+namespace: openbao
+repoURL: https://openbao.github.io/openbao-helm
+chart: openbao
+version: 0.30.6
+privileged: false

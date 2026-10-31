@@ -1,0 +1,27 @@
+# Applied on EKS. Hourly backups of the namespaces whose volumes have no
+# engine-level replication (the rest move with CNPG, MirrorMaker 2 and rclone).
+# Workload manifests are not what we need from these backups: Argo CD deploys
+# them from git on the new cluster.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: migration-volumes
+  namespace: velero
+spec:
+  schedule: "0 * * * *"
+  useOwnerReferencesInBackup: false
+  template:
+    storageLocation: migration
+    ttl: 168h
+    includedNamespaces:
+      - search
+      - media
+    includedResources:
+      - persistentvolumeclaims
+      - persistentvolumes
+    # CSI snapshot of each EBS volume, then the data mover uploads its
+    # contents to the bucket (needs the EBS VolumeSnapshotClass labelled
+    # velero.io/csi-volumesnapshot-class=true).
+    snapshotVolumes: true
+    snapshotMoveData: true
+    defaultVolumesToFsBackup: false

@@ -1,0 +1,92 @@
+# One Application per platform/components/<name>/config.yaml: the chart from its
+# Helm repository, the values file from this repository.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/ozy31/eks-to-onprem-repatriation.git
+        revision: main
+        files:
+          - path: platform/components/*/config.yaml
+  template:
+    metadata:
+      name: "{{ .name }}"
+      labels:
+        app.kubernetes.io/part-of: platform
+    spec:
+      project: platform
+      sources:
+        - repoURL: "{{ .repoURL }}"
+          chart: "{{ .chart }}"
+          targetRevision: "{{ .version }}"
+          helm:
+            releaseName: "{{ .name }}"
+            valueFiles:
+              - "$values/{{ .path.path }}/values.yaml"
+        - repoURL: https://github.com/ozy31/eks-to-onprem-repatriation.git
+          targetRevision: main
+          ref: values
+      destination:
+        name: in-cluster
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        # Components depend on each other's CRDs (Rook cluster on the operator,
+        # backups on cert-manager); retries settle the order on a fresh cluster.
+        retry:
+          limit: 10
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 10m
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - SkipDryRunOnMissingResource=true
+  # Rook, Velero's node agent and Ceph CSI mount host paths; Talos enforces the
+  # "baseline" Pod Security level everywhere else.
+  templatePatch: |
+    {{- if .privileged }}
+    spec:
+      syncPolicy:
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: privileged
+    {{- end }}
+---
+# Cluster-wide objects that are not a Helm chart: BGP and load balancer IPs,
+# the Gateway, issuers and secret stores.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-config
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ozy31/eks-to-onprem-repatriation.git
+    targetRevision: main
+    path: platform/manifests
+  destination:
+    name: in-cluster
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
+    syncOptions:
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

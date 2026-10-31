@@ -1,0 +1,17 @@
+# The service as it runs on EKS today: IRSA identity, secrets from AWS Secrets
+# Manager, ALB ingress, RDS and MSK endpoints.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: orders
+resources:
+  - ../../base
+  - serviceaccount.yaml
+  - externalsecret.yaml
+  - ingress.yaml
+configMapGenerator:
+  - name: orders-api-endpoints
+    literals:
+      - KAFKA_BOOTSTRAP=b-1.events.example.kafka.eu-west-1.amazonaws.com:9096,b-2.events.example.kafka.eu-west-1.amazonaws.com:9096
+      - KAFKA_SASL_USERNAME=orders-api
+      - DOCUMENTS_BUCKET=orders-documents-prod
+      - S3_ENDPOINT=

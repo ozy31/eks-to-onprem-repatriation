@@ -1,0 +1,131 @@
+# S3 -> Ceph RGW for application buckets. rclone runs every 15 minutes during
+# the migration, so the final sync at cutover only moves the last changes.
+#
+# "copy", not "sync": nothing is ever deleted on the target by this job; stale
+# objects are cleaned up after the cutover with a reviewed `rclone check`.
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: orders-documents
+  namespace: orders
+spec:
+  bucketName: orders-documents
+  storageClassName: ceph-bucket
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rclone-config
+  namespace: orders
+data:
+  # Credentials come from the environment (RCLONE_CONFIG_<REMOTE>_*).
+  rclone.conf: |
+    [s3]
+    type = s3
+    provider = AWS
+    region = eu-west-1
+    env_auth = false
+
+    [rgw]
+    type = s3
+    provider = Ceph
+    endpoint = http://rook-ceph-rgw-ceph-objectstore.rook-ceph.svc
+    env_auth = false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: s3-to-rgw-orders-documents
+  namespace: orders
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rclone
+              image: rclone/rclone:1.75.2
+              args:
+                - copy
+                - s3:orders-documents-prod
+                - rgw:orders-documents
+                - --config=/config/rclone.conf
+                - --checksum
+                - --transfers=32
+                - --checkers=64
+                - --s3-no-check-bucket
+                - --stats=60s
+                - --stats-one-line
+              env:
+                - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: s3-migration-reader
+                      key: access-key-id
+                - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: s3-migration-reader
+                      key: secret-access-key
+                - name: RCLONE_CONFIG_RGW_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: orders-documents
+                      key: AWS_ACCESS_KEY_ID
+                - name: RCLONE_CONFIG_RGW_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: orders-documents
+                      key: AWS_SECRET_ACCESS_KEY
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
+                limits:
+                  memory: 1Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                - name: cache
+                  mountPath: /.cache
+          volumes:
+            - name: config
+              configMap:
+                name: rclone-config
+            - name: cache
+              emptyDir: {}
+---
+# Read-only IAM user for the source bucket; keys from OpenBao.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: s3-migration-reader
+  namespace: orders
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: s3-migration-reader
+  dataFrom:
+    - extract:
+        key: migration/s3-reader

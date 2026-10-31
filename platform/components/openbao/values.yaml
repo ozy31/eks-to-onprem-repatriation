@@ -1,0 +1,82 @@
+# Replaces AWS Secrets Manager and KMS. Three-node Raft cluster on Ceph block
+# storage; External Secrets reads from it with Kubernetes auth.
+#
+# There is no cloud KMS for auto-unseal any more. The cluster uses Shamir unseal
+# (5 key shares, 3 required, held by different people); docs/runbook.md covers
+# unsealing after a full restart. An HSM (pkcs11 seal) is the upgrade path.
+injector:
+  enabled: false
+
+server:
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          address         = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file   = "/openbao/tls/tls.crt"
+          tls_key_file    = "/openbao/tls/tls.key"
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+          retry_join {
+            leader_api_addr     = "https://openbao-0.openbao-internal:8200"
+            leader_ca_cert_file = "/openbao/tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr     = "https://openbao-1.openbao-internal:8200"
+            leader_ca_cert_file = "/openbao/tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr     = "https://openbao-2.openbao-internal:8200"
+            leader_ca_cert_file = "/openbao/tls/ca.crt"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname          = true
+        }
+
+  # Server certificate issued by cert-manager from the internal CA
+  # (platform/manifests/cert-manager.yaml).
+  volumes:
+    - name: tls
+      secret:
+        secretName: openbao-tls
+  volumeMounts:
+    - name: tls
+      mountPath: /openbao/tls
+      readOnly: true
+  extraEnvironmentVars:
+    BAO_CACERT: /openbao/tls/ca.crt
+
+  dataStorage:
+    enabled: true
+    size: 20Gi
+    storageClass: ceph-block
+  auditStorage:
+    enabled: true
+    size: 20Gi
+    storageClass: ceph-block
+
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: openbao
+              component: server
+          topologyKey: kubernetes.io/hostname
+
+ui:
+  enabled: true

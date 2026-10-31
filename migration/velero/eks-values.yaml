@@ -1,0 +1,38 @@
+# Velero on the EKS side (helm upgrade --install with the same chart version as
+# platform/components/velero). It writes backups to the migration bucket that
+# the on-prem Velero reads read-only.
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.4
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+deployNodeAgent: true
+snapshotsEnabled: false
+
+# EBS volumes are captured with CSI snapshots and the data mover copies the
+# snapshot contents into the bucket (Kopia). The on-prem side restores that
+# data straight into new Ceph volumes; no EBS snapshot has to leave AWS.
+configuration:
+  features: EnableCSI
+  uploaderType: kopia
+  defaultVolumesToFsBackup: false
+  backupStorageLocation:
+    - name: migration
+      provider: aws
+      bucket: platform-migration-velero
+      prefix: eks-prod
+      default: true
+      accessMode: ReadWrite
+      config:
+        region: eu-west-1
+
+# EKS Pod Identity association for this service account gives S3 access to the
+# migration bucket only; no static keys on the AWS side.
+credentials:
+  useSecret: false
+serviceAccount:
+  server:
+    name: velero

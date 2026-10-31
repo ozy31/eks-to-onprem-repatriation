@@ -1,0 +1,15 @@
+# Rook operator. The Ceph cluster itself is the rook-ceph-cluster component.
+crds:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# Ceph is the replacement for three AWS services at once: RBD for EBS,
+# CephFS for EFS and the RADOS Gateway for S3. Rook needs the OBC provisioner
+# for bucket claims (see migration/objects).
+enableDiscoveryDaemon: true

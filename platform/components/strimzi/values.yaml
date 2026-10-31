@@ -1,0 +1,4 @@
+# Replaces Amazon MSK. The operator watches every namespace; the Kafka cluster
+# and the MirrorMaker 2 that copies topics from MSK are in migration/kafka.
+watchAnyNamespace: true
+replicas: 1

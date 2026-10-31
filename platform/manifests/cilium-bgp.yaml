@@ -1,0 +1,95 @@
+# Load balancer IPs and BGP: replaces NLB/ALB addresses and VPC routing.
+#
+# Every node peers with the two top-of-rack switches of its rack and announces
+#   - its pod CIDR (native routing, no overlay), and
+#   - the LoadBalancer IPs of Services it can serve (the Gateway, Kafka).
+# The ToR switches run ECMP across nodes, so there is no single LB box.
+#
+# Addresses are RFC 5737 / RFC 1918 placeholders.
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: public
+spec:
+  blocks:
+    - cidr: 198.51.100.0/27
+  serviceSelector:
+    matchLabels:
+      lb.dc1.example.com/pool: public
+---
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: internal
+spec:
+  blocks:
+    - cidr: 10.20.0.0/24
+  serviceSelector:
+    matchExpressions:
+      - key: lb.dc1.example.com/pool
+        operator: NotIn
+        values: ["public"]
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: tor
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/os: linux
+  bgpInstances:
+    - name: dc1
+      localASN: 64512
+      peers:
+        - name: tor-a
+          peerASN: 64600
+          peerAddress: 10.10.0.1
+          peerConfigRef:
+            name: tor
+        - name: tor-b
+          peerASN: 64600
+          peerAddress: 10.10.0.2
+          peerConfigRef:
+            name: tor
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPPeerConfig
+metadata:
+  name: tor
+spec:
+  # Fast failover: BFD is on the switch side; short timers here so a dead
+  # node stops receiving traffic within seconds.
+  timers:
+    connectRetryTimeSeconds: 5
+    holdTimeSeconds: 9
+    keepAliveTimeSeconds: 3
+  gracefulRestart:
+    enabled: true
+    restartTimeSeconds: 120
+  families:
+    - afi: ipv4
+      safi: unicast
+      advertisements:
+        matchLabels:
+          bgp.dc1.example.com/advertise: tor
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata:
+  name: tor
+  labels:
+    bgp.dc1.example.com/advertise: tor
+spec:
+  advertisements:
+    - advertisementType: PodCIDR
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+      # All LoadBalancer services. With externalTrafficPolicy=Local only the
+      # nodes running a backend announce the address.
+      selector:
+        matchExpressions:
+          - key: bgp.dc1.example.com/skip
+            operator: DoesNotExist

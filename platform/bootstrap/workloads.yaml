@@ -1,0 +1,49 @@
+# Placement of product services during the migration.
+#
+#   workloads/<service>/overlays/<cluster>/
+#
+# Every overlay directory becomes an Application that deploys <service> to the
+# Argo CD cluster named <cluster> (eks-prod or dc1-prod). Moving a service is a
+# pull request that adds the dc1-prod overlay, and later one that deletes the
+# eks-prod overlay; while both exist the service runs at both sites and the
+# Cloudflare load balancer weights decide who gets traffic.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workloads
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/ozy31/eks-to-onprem-repatriation.git
+        revision: main
+        directories:
+          - path: workloads/*/overlays/*
+  template:
+    metadata:
+      name: "{{ index .path.segments 1 }}-{{ .path.basename }}"
+      labels:
+        app.kubernetes.io/part-of: workloads
+        repatriation/site: "{{ .path.basename }}"
+    spec:
+      project: workloads
+      source:
+        repoURL: https://github.com/ozy31/eks-to-onprem-repatriation.git
+        targetRevision: main
+        path: "{{ .path.path }}"
+      destination:
+        name: "{{ .path.basename }}"
+        namespace: "{{ index .path.segments 1 }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+  # Deleting an overlay removes the Application but leaves its resources
+  # running; the old copy is scaled down and deleted by hand once the load
+  # balancer sends it 0% (docs/runbook.md, phase 4).
+  syncPolicy:
+    preserveResourcesOnDeletion: true

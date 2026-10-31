@@ -1,0 +1,57 @@
+# Applied on the on-prem cluster. The storage classes and the EKS-specific
+# metadata are rewritten on the way in.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: change-storage-class
+  namespace: velero
+  labels:
+    velero.io/plugin-config: ""
+    velero.io/change-storage-class: RestoreItemAction
+data:
+  gp3: ceph-block
+  gp2: ceph-block
+  efs-sc: ceph-filesystem
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eks-to-dc1
+  namespace: velero
+data:
+  rules.yaml: |
+    version: v1
+    resourceModifierRules:
+      # IRSA / Pod Identity annotations point at AWS IAM roles that mean
+      # nothing on-prem.
+      - conditions:
+          groupResource: serviceaccounts
+        patches:
+          - operation: remove
+            path: /metadata/annotations/eks.amazonaws.com~1role-arn
+      # Volumes pinned to an AWS availability zone would never schedule.
+      - conditions:
+          groupResource: persistentvolumeclaims
+        patches:
+          - operation: remove
+            path: /metadata/annotations/volume.kubernetes.io~1selected-node
+---
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: migration-volumes-final
+  namespace: velero
+spec:
+  # Set to the backup taken after the services were stopped on EKS:
+  #   velero backup get --storage-location migration
+  scheduleName: migration-volumes
+  includedNamespaces:
+    - search
+    - media
+  # The data mover writes the backed-up volume data into new PVCs on
+  # ceph-block; Argo CD then deploys the workloads that mount them.
+  restorePVs: true
+  existingResourcePolicy: none
+  resourceModifier:
+    kind: ConfigMap
+    name: eks-to-dc1

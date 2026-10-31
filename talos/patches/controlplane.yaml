@@ -1,0 +1,39 @@
+# Three control-plane nodes, one per rack. They run etcd and the API server
+# only; the default control-plane taint keeps workloads off.
+apiVersion: v1alpha1
+kind: KubeAPIServerConfig
+certExtraSANs:
+  - api.dc1.example.com
+---
+# The audit trail the EKS control-plane logs used to give us.
+apiVersion: v1alpha1
+kind: KubeAuditPolicyConfig
+configuration:
+  apiVersion: audit.k8s.io/v1
+  kind: Policy
+  rules:
+    - level: None
+      resources:
+        - group: ""
+          resources: [events]
+    - level: Metadata
+      resources:
+        - group: ""
+          resources: [secrets, configmaps]
+    - level: RequestResponse
+      verbs: [create, update, patch, delete]
+    - level: Metadata
+---
+apiVersion: v1alpha1
+kind: KubeExternalManifestConfig
+name: kubelet-serving-cert-approver
+url: https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/v0.12.1/deploy/standalone-install.yaml
+---
+# Lets the platform read node state through the Talos API from kube-system
+# (node exporter style health checks), nothing more.
+apiVersion: v1alpha1
+kind: KubeTalosAPIAccessConfig
+allowedRoles:
+  - os:reader
+allowedKubernetesNamespaces:
+  - kube-system

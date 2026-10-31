@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Shared platform components of the on-prem cluster
+  sourceRepos:
+    - https://github.com/ozy31/eks-to-onprem-repatriation.git
+    - https://helm.cilium.io
+    - https://charts.rook.io/release
+    - https://charts.jetstack.io
+    - https://charts.external-secrets.io
+    - https://openbao.github.io/openbao-helm
+    - https://cloudnative-pg.github.io/charts
+    - https://strimzi.io/charts/
+    - https://vmware-tanzu.github.io/helm-charts
+    - https://kubernetes-sigs.github.io/external-dns/
+    - https://argoproj.github.io/argo-helm
+  destinations:
+    - name: in-cluster
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: workloads
+  namespace: argocd
+spec:
+  description: Product services, deployed to EKS, to dc1 or to both during the migration
+  sourceRepos:
+    - https://github.com/ozy31/eks-to-onprem-repatriation.git
+  destinations:
+    - name: eks-prod
+      namespace: "*"
+    - name: dc1-prod
+      namespace: "*"
+  # Product teams cannot create cluster-scoped objects.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

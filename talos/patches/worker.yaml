@@ -1,0 +1,5 @@
+# General-purpose workers (replace the Karpenter-managed EKS node pools).
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+labels:
+  node.kubernetes.io/pool: general

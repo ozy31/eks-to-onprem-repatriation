@@ -1,0 +1,18 @@
+# Storage workers, applied on top of worker.yaml. The NVMe data disks belong to
+# Ceph; the label and taint keep general workloads off these nodes so OSD
+# latency stays predictable.
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+labels:
+  node.kubernetes.io/pool: storage
+  node.kubernetes.io/storage: ceph
+taints:
+  node.kubernetes.io/storage: ceph:NoSchedule
+---
+apiVersion: v1alpha1
+kind: KernelModuleConfig
+name: rbd
+---
+apiVersion: v1alpha1
+kind: KernelModuleConfig
+name: nbd

@@ -1,0 +1,24 @@
+# Migration-only resources on the on-prem cluster: the CloudNativePG cluster
+# and its subscription to RDS, Kafka + MirrorMaker 2, bucket sync, Velero
+# restore helpers. Files meant for the EKS side are excluded.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: migration
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/ozy31/eks-to-onprem-repatriation.git
+    targetRevision: main
+    path: migration
+    directory:
+      recurse: true
+      exclude: "{velero/backup-eks.yaml,velero/eks-values.yaml,velero/restore-dc1.yaml}"
+  destination:
+    name: in-cluster
+  syncPolicy:
+    # Not automated: every step of a migration is a deliberate sync.
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

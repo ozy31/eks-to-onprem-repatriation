@@ -1,0 +1,54 @@
+# Cilium is the CNI, the kube-proxy replacement, the LoadBalancer (BGP) and the
+# Gateway API implementation: on EKS those were the VPC CNI, kube-proxy, NLB/ALB
+# and the AWS Load Balancer Controller.
+#
+# The same file is used by `make bootstrap` (helm install before Argo CD exists)
+# and by Argo CD afterwards, so the hand-over causes no diff.
+
+# Talos runs without kube-proxy and exposes the API server on every node through
+# KubePrism at localhost:7445.
+kubeProxyReplacement: true
+k8sServiceHost: localhost
+k8sServicePort: 7445
+
+# Talos mounts cgroup v2 itself and does not allow SYS_MODULE.
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+securityContext:
+  capabilities:
+    ciliumAgent: [CHOWN, KILL, NET_ADMIN, NET_RAW, IPC_LOCK, SYS_ADMIN, SYS_RESOURCE, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    cleanCiliumState: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]
+
+# Pod CIDRs come from the Kubernetes node spec (Talos podSubnets) and are
+# advertised to the top-of-rack switches over BGP, so pod traffic is routed
+# natively without an overlay.
+ipam:
+  mode: kubernetes
+routingMode: native
+ipv4NativeRoutingCIDR: 10.244.0.0/16
+bpf:
+  masquerade: true
+
+bgpControlPlane:
+  enabled: true
+
+gatewayAPI:
+  enabled: true
+  enableAlpn: true
+  enableAppProtocol: true
+
+operator:
+  replicas: 2
+
+hubble:
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enabled: [dns, drop, tcp, flow, port-distribution, "httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_namespace,destination_workload"]
+
+prometheus:
+  enabled: true

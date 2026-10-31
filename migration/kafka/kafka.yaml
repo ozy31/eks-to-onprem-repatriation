@@ -1,0 +1,97 @@
+# Replaces Amazon MSK: KRaft mode (no ZooKeeper), three nodes acting as both
+# controllers and brokers, spread across racks, on Ceph block volumes.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: events
+spec:
+  replicas: 3
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        class: ceph-block
+        size: 500Gi
+        deleteClaim: false
+        kraftMetadata: shared
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+    limits:
+      memory: 8Gi
+  template:
+    pod:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  strimzi.io/pool-name: dual-role
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: events
+  namespace: kafka
+spec:
+  kafka:
+    # Brokers learn their rack from the node's topology label so replicas of a
+    # partition land in different racks (MSK did this across AZs).
+    rack:
+      topologyKey: topology.kubernetes.io/zone
+    listeners:
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+        authentication:
+          type: scram-sha-512
+    authorization:
+      type: simple
+    config:
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      auto.create.topics.enable: false
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+---
+# Identity for MirrorMaker 2 on the target cluster.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: mirrormaker
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: events
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: "*"
+          patternType: literal
+        operations: [Create, Describe, DescribeConfigs, Write, Read, AlterConfigs]
+      - resource:
+          type: group
+          name: "*"
+          patternType: literal
+        operations: [Describe, Read, Alter]
+      - resource:
+          type: cluster
+        operations: [Describe, DescribeConfigs, Create]

@@ -1,0 +1,45 @@
+# Illustrative numbers for a mid-sized platform; replace with your own bill
+# (Cost Explorer, grouped by service) and real hardware quotes.
+horizon_months = 60
+
+[cloud]
+growth_percent_per_year = 10.0
+
+[cloud.monthly]
+"EC2 (EKS nodes)" = 41000
+"EBS" = 7500
+"RDS" = 14000
+"MSK" = 6500
+"S3" = 5200
+"Data transfer out + NAT" = 12800
+"ELB" = 2100
+"EKS control plane, CloudWatch, other" = 3900
+"Support (Business)" = 6000
+
+[onprem]
+amortization_months = 60
+racks = 4
+rack_month = 2500
+kw_per_rack = 8
+pue = 1.4
+price_per_kwh = 0.14
+fte = 2
+fte_month = 11000
+
+hardware = [
+  { name = "compute nodes (2x 64-core, 1 TB RAM)", units = 14, unit_price = 38000 },
+  { name = "storage nodes (6x 7.68 TB NVMe)", units = 6, unit_price = 31000 },
+  { name = "control plane nodes", units = 3, unit_price = 9000 },
+  { name = "ToR switches (25/100G)", units = 8, unit_price = 14000 },
+  { name = "spares and cabling", units = 1, unit_price = 45000 },
+]
+
+[onprem.monthly]
+"IP transit (2 carriers)" = 3200
+"hardware support contracts" = 4100
+"Cloudflare (LB, WAF, Tunnel)" = 1500
+"off-site backup copy" = 900
+
+[migration]
+one_off = 180000
+dual_running_months = 6

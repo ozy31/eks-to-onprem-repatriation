@@ -1,0 +1,8 @@
+# One directory per platform component. platform/bootstrap/platform.yaml turns
+# every config.yaml into an Argo CD Application with values.yaml next to it.
+name: cilium
+namespace: kube-system
+repoURL: https://helm.cilium.io
+chart: cilium
+version: 1.20.4
+privileged: false

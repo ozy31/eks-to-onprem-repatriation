@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orders
+  labels:
+    gateway.dc1.example.com/public: "true"
+    pod-security.kubernetes.io/enforce: restricted

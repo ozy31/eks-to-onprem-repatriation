@@ -1,0 +1,77 @@
+# Replaces the RDS instance "orders". Three instances across hosts (Multi-AZ
+# equivalent), WAL archived to Ceph RGW (PITR), schema imported from RDS and
+# data streamed with logical replication (subscription.yaml).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: orders-db
+  namespace: orders
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+  primaryUpdateStrategy: unsupervised
+
+  # Schema only: the data arrives through the subscription, so the initial
+  # copy and the ongoing changes use the same, consistent mechanism.
+  bootstrap:
+    initdb:
+      database: orders
+      owner: orders
+      import:
+        type: microservice
+        databases: [orders]
+        schemaOnly: true
+        source:
+          externalCluster: rds
+
+  externalClusters:
+    - name: rds
+      connectionParameters:
+        host: orders.cluster-example.eu-west-1.rds.amazonaws.com
+        user: cnpg_replicator
+        dbname: orders
+        sslmode: verify-full
+      password:
+        name: rds-replicator
+        key: password
+      sslRootCert:
+        name: rds-ca
+        key: ca.crt
+
+  postgresql:
+    parameters:
+      max_connections: "400"
+      shared_buffers: 4GB
+      effective_cache_size: 12GB
+      work_mem: 16MB
+      max_wal_size: 8GB
+      # Logical replication workers for the initial table sync.
+      max_logical_replication_workers: "8"
+      max_sync_workers_per_subscription: "4"
+    pg_hba:
+      - hostssl all all 10.244.0.0/16 scram-sha-256
+
+  storage:
+    storageClass: ceph-block
+    size: 500Gi
+  walStorage:
+    storageClass: ceph-block
+    size: 100Gi
+
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+    limits:
+      memory: 16Gi
+
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: required
+
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: orders-db-backups

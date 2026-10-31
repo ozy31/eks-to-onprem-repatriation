@@ -1,0 +1,121 @@
+# Velero's own bucket on Ceph RGW. Rook creates the bucket, a dedicated user and
+# a Secret with its keys; External Secrets turns those keys into the
+# credentials file Velero expects, so nobody copies keys by hand.
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: velero-bucket
+  namespace: velero
+spec:
+  bucketName: velero
+  storageClassName: ceph-bucket
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: obc-reader
+  namespace: velero
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: obc-reader
+  namespace: velero
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [velero-bucket]
+    verbs: [get]
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectrulesreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: obc-reader
+  namespace: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: obc-reader
+subjects:
+  - kind: ServiceAccount
+    name: obc-reader
+    namespace: velero
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: obc
+  namespace: velero
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: velero
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: obc-reader
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: velero-ceph
+  namespace: velero
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: obc
+    kind: SecretStore
+  target:
+    name: velero-ceph
+    template:
+      data:
+        cloud: |
+          [default]
+          aws_access_key_id={{ .accessKey }}
+          aws_secret_access_key={{ .secretKey }}
+  data:
+    - secretKey: accessKey
+      remoteRef:
+        key: velero-bucket
+        property: AWS_ACCESS_KEY_ID
+    - secretKey: secretKey
+      remoteRef:
+        key: velero-bucket
+        property: AWS_SECRET_ACCESS_KEY
+---
+# Read-only access to the EKS backups in S3, for the restore during the
+# migration. Delete this together with the migration bucket afterwards.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: velero-aws
+  namespace: velero
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: velero-aws
+    template:
+      data:
+        cloud: |
+          [default]
+          aws_access_key_id={{ .accessKey }}
+          aws_secret_access_key={{ .secretKey }}
+  data:
+    - secretKey: accessKey
+      remoteRef:
+        key: migration/velero-reader
+        property: access-key-id
+    - secretKey: secretKey
+      remoteRef:
+        key: migration/velero-reader
+        property: secret-access-key

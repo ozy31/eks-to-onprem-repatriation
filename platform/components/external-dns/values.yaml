@@ -1,0 +1,30 @@
+# Replaces Route 53 records managed by external-dns on EKS.
+#
+# During the migration both clusters run external-dns against the same
+# Cloudflare zone, so each one owns a separate subdomain: this cluster only
+# writes *.dc1.example.com (origin records for the Cloudflare load balancer).
+# The public hostnames belong to terraform/traffic-shift.
+provider:
+  name: cloudflare
+
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+
+sources:
+  - gateway-httproute
+  - service
+
+domainFilters:
+  - dc1.example.com
+
+policy: sync
+registry: txt
+txtOwnerId: dc1-prod
+txtPrefix: _edns.
+
+extraArgs:
+  - --cloudflare-proxied

@@ -1,0 +1,6 @@
+name: velero
+namespace: velero
+repoURL: https://vmware-tanzu.github.io/helm-charts
+chart: velero
+version: 12.2.2
+privileged: true

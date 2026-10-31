@@ -1,0 +1,55 @@
+# Velero on the on-prem cluster. It reads the EKS backups from the migration
+# bucket (read-only, so a mistake here cannot delete them) and takes its own
+# backups to the Ceph object store. The EKS side of the same setup is
+# migration/velero/eks-values.yaml.
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.4
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# File-system backup with Kopia: EBS snapshots cannot be restored on Ceph, so
+# volume data is copied at file level instead.
+deployNodeAgent: true
+snapshotsEnabled: false
+
+configuration:
+  # Restores data-mover backups from EKS (migration/velero).
+  features: EnableCSI
+  uploaderType: kopia
+  defaultVolumesToFsBackup: true
+  backupStorageLocation:
+    - name: dc1
+      provider: aws
+      bucket: velero
+      prefix: dc1-prod
+      default: true
+      accessMode: ReadWrite
+      config:
+        region: dc1
+        s3ForcePathStyle: "true"
+        s3Url: http://rook-ceph-rgw-ceph-objectstore.rook-ceph.svc
+      credential:
+        name: velero-ceph
+        key: cloud
+    - name: migration
+      provider: aws
+      bucket: platform-migration-velero
+      prefix: eks-prod
+      accessMode: ReadOnly
+      config:
+        region: eu-west-1
+
+credentials:
+  useSecret: true
+  existingSecret: velero-aws
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi

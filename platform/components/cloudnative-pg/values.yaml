@@ -1,0 +1,9 @@
+# Replaces RDS. Clusters, backups and the logical replication from RDS are in
+# migration/postgres.
+crds:
+  create: true
+replicaCount: 2
+monitoring:
+  podMonitorEnabled: false
+config:
+  clusterWide: true

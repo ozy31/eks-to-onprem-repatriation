@@ -1,0 +1,30 @@
+# Argo CD manages itself after `make bootstrap`. The EKS cluster is registered
+# as a second destination for the hybrid phase (platform/bootstrap/workloads.yaml).
+global:
+  domain: argocd.dc1.example.com
+
+configs:
+  params:
+    server.insecure: true
+  cm:
+    exec.enabled: false
+    admin.enabled: false
+    application.resourceTrackingMethod: annotation
+
+controller:
+  replicas: 1
+
+repoServer:
+  replicas: 2
+
+server:
+  replicas: 2
+
+applicationSet:
+  replicas: 2
+
+redis-ha:
+  enabled: true
+
+dex:
+  enabled: false

@@ -1,0 +1,22 @@
+# The same service in the data centre: no cloud identity, secrets from OpenBao,
+# an HTTPRoute on the shared Gateway, Kafka and object storage on-prem.
+#
+# The database secret in OpenBao points at RDS (over the site-to-site VPN)
+# until the PostgreSQL cutover, then at orders-db-rw; the change is one
+# `bao kv patch`, no deploy (docs/runbook.md, phase 3).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: orders
+resources:
+  - ../../base
+  - namespace.yaml
+  - serviceaccount.yaml
+  - externalsecret.yaml
+  - httproute.yaml
+configMapGenerator:
+  - name: orders-api-endpoints
+    literals:
+      - KAFKA_BOOTSTRAP=events-kafka-bootstrap.kafka.svc:9093
+      - KAFKA_SASL_USERNAME=orders-api
+      - DOCUMENTS_BUCKET=orders-documents
+      - S3_ENDPOINT=http://rook-ceph-rgw-ceph-objectstore.rook-ceph.svc

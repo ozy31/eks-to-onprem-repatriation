@@ -1,0 +1,9 @@
+# Replaces the AWS Secrets Manager provider. Same ExternalSecret objects, a new
+# ClusterSecretStore (platform/manifests/external-secrets.yaml) backed by OpenBao.
+installCRDs: true
+replicaCount: 2
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+serviceMonitor:
+  enabled: false

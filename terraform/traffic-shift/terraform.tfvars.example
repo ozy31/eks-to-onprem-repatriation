@@ -1,0 +1,20 @@
+account_id = "0123456789abcdef0123456789abcdef"
+zone_id    = "fedcba9876543210fedcba9876543210"
+hostname   = "orders.example.com"
+
+sites = {
+  eks = {
+    origins = [
+      { name = "alb", address = "public-alb-0123456789.eu-west-1.elb.amazonaws.com" },
+    ]
+  }
+  dc1 = {
+    origins = [
+      # Gateway VIP announced over BGP (platform/manifests/cilium-bgp.yaml).
+      { name = "gateway", address = "198.51.100.10" },
+    ]
+  }
+}
+
+# Phase 2 steps: 0 -> 1 -> 5 -> 25 -> 50 -> 100
+dc1_traffic_percent = 5

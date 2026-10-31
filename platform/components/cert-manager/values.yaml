@@ -1,0 +1,19 @@
+# Replaces ACM. Certificates come from Let's Encrypt with DNS-01 on Cloudflare
+# (platform/manifests/cert-manager.yaml), so issuance does not depend on which
+# site currently receives traffic.
+crds:
+  enabled: true
+  keep: true
+
+replicaCount: 2
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  enableGatewayAPI: true
+
+prometheus:
+  enabled: true

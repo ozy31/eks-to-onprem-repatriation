@@ -1,0 +1,13 @@
+# Site-independent part of the service. Everything that differs between EKS
+# and the data centre (identity, secrets, ingress, endpoints) is in overlays/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: orders
+labels:
+  - pairs:
+      app.kubernetes.io/name: orders-api
+    includeSelectors: true
+resources:
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml

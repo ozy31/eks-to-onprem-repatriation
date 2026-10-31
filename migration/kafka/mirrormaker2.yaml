@@ -1,0 +1,71 @@
+# MSK -> on-prem Kafka. Topics keep their names (IdentityReplicationPolicy) and
+# consumer group offsets are translated and synced, so a consumer moved to the
+# new cluster continues where it stopped instead of re-reading or skipping.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaMirrorMaker2
+metadata:
+  name: msk-to-dc1
+  namespace: kafka
+spec:
+  replicas: 2
+  target:
+    alias: dc1
+    bootstrapServers: events-kafka-bootstrap.kafka.svc:9093
+    groupId: mirrormaker2-msk-to-dc1
+    configStorageTopic: mirrormaker2-msk-to-dc1-config
+    offsetStorageTopic: mirrormaker2-msk-to-dc1-offsets
+    statusStorageTopic: mirrormaker2-msk-to-dc1-status
+    tls:
+      trustedCertificates:
+        - secretName: events-cluster-ca-cert
+          pattern: "*.crt"
+    authentication:
+      type: scram-sha-512
+      username: mirrormaker
+      passwordSecret:
+        secretName: mirrormaker
+        password: password
+    config:
+      config.storage.replication.factor: 3
+      offset.storage.replication.factor: 3
+      status.storage.replication.factor: 3
+  mirrors:
+    - source:
+        alias: msk
+        bootstrapServers: b-1.events.example.kafka.eu-west-1.amazonaws.com:9096,b-2.events.example.kafka.eu-west-1.amazonaws.com:9096
+        # MSK presents a certificate from a public CA: the JVM trust store is enough.
+        tls: {}
+        authentication:
+          type: scram-sha-512
+          username: mirrormaker
+          passwordSecret:
+            secretName: msk-mirrormaker
+            password: password
+      topicsPattern: ".*"
+      topicsExcludePattern: "__.*|mirrormaker2-.*|.*[-.]internal"
+      groupsPattern: ".*"
+      sourceConnector:
+        tasksMax: 8
+        config:
+          replication.policy.class: org.apache.kafka.connect.mirror.IdentityReplicationPolicy
+          replication.factor: 3
+          offset-syncs.topic.replication.factor: 3
+          offset-syncs.topic.location: target
+          sync.topic.acls.enabled: "false"
+          refresh.topics.interval.seconds: 60
+      checkpointConnector:
+        tasksMax: 2
+        config:
+          replication.policy.class: org.apache.kafka.connect.mirror.IdentityReplicationPolicy
+          checkpoints.topic.replication.factor: 3
+          offset-syncs.topic.location: target
+          sync.group.offsets.enabled: "true"
+          sync.group.offsets.interval.seconds: 30
+          emit.checkpoints.interval.seconds: 30
+          refresh.groups.interval.seconds: 60
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      memory: 2Gi

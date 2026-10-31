@@ -1,0 +1,3 @@
+# Barman Cloud plugin: base backups and WAL archiving to the Ceph object store
+# (replaces RDS automated backups and PITR). Requires cert-manager.
+replicaCount: 1
